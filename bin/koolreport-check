@@ -1,0 +1,75 @@
+#!/usr/bin/env php
+<?php
+/**
+ * Check KoolReport report code without running it.
+ *
+ *   php check.php [--root <dir with koolreport packages>] [--json] <file or dir>...
+ *
+ * Finds classes that do not exist (with "did you mean" suggestions), export targets that are
+ * not data stores, and the version pitfalls listed under "lint" in facts.php. Exit code 1 when
+ * there is an error-level finding. Without --root, classes are indexed from the nearest
+ * vendor/koolreport above the first path, else from the dev tree.
+ */
+
+// Runs from tools/llms (lib/ beside it) or from the koolreport/mcp package (bin/, lib/ one level up).
+$base = is_dir(__DIR__ . "/lib") ? __DIR__ : dirname(__DIR__);
+require "$base/lib/Checker.php";
+
+$args = array_slice($argv, 1);
+$json = false;
+$root = null;
+$paths = array();
+for ($i = 0; $i < count($args); $i++) {
+    if ($args[$i] === "--json") {
+        $json = true;
+    } elseif ($args[$i] === "--root") {
+        $root = $args[++$i];
+    } else {
+        $paths[] = $args[$i];
+    }
+}
+if (!$paths) {
+    fwrite(STDERR, "usage: php check.php [--root <dir>] [--json] <file or dir>...\n");
+    exit(2);
+}
+
+$files = array();
+foreach ($paths as $path) {
+    if (is_file($path)) {
+        $files[$path] = file_get_contents($path);
+        continue;
+    }
+    $it = new RecursiveIteratorIterator(new RecursiveCallbackFilterIterator(
+        new RecursiveDirectoryIterator($path, FilesystemIterator::SKIP_DOTS),
+        function ($f) {
+            return !$f->isLink() && !($f->isDir() && in_array($f->getFilename(), array("vendor", "node_modules", ".git")));
+        }
+    ));
+    foreach ($it as $f) {
+        if (substr($f->getFilename(), -4) === ".php") {
+            $files[$f->getPathname()] = file_get_contents($f->getPathname());
+        }
+    }
+}
+
+$root = $root ?: koolreport_find_install($paths[0]);
+list($classes, $namespaces) = koolreport_class_index(koolreport_package_dirs($root));
+list($rules) = koolreport_resources($base);
+$findings = koolreport_check_sources($files, $classes, $namespaces, $rules);
+
+if ($json) {
+    echo json_encode(array("root" => $root, "classes" => count($classes), "findings" => $findings), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES), "\n";
+} else {
+    foreach ($findings as $f) {
+        printf("%s:%d: %s [%s] %s\n", $f["file"], $f["line"], $f["level"], $f["rule"], $f["message"]);
+    }
+    if (!$findings) {
+        echo "No problems found (" . count($classes) . " classes indexed from $root).\n";
+    }
+}
+foreach ($findings as $f) {
+    if ($f["level"] === "error") {
+        exit(1);
+    }
+}
+exit(0);

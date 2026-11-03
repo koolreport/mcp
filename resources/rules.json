@@ -1,0 +1,121 @@
+[
+    {
+        "id": "datasource-string",
+        "level": "warning",
+        "pattern": "/[\"']dataSource[\"']\\s*=>\\s*[\"'][A-Za-z_]\\w*[\"']/",
+        "message": "A data store name as \"dataSource\" works from core 6.8.0 only; pass $this->dataStore(\"name\"), which works in every version."
+    },
+    {
+        "id": "string-expression",
+        "level": "warning",
+        "pattern": "/CalculatedColumn\\s*\\((?:(?!\\)\\s*\\)).)*=>\\s*[\"'][^\"']*\\{\\w+\\}/s",
+        "message": "CalculatedColumn string expressions fail on text values before core 6.8.1. Use function ($row) { ... }, which works in every version."
+    },
+    {
+        "id": "formatvalue-string",
+        "level": "warning",
+        "pattern": "/[\"']formatValue[\"']\\s*=>\\s*[\"']/",
+        "message": "A formatValue string fails on text values before core 6.8.1. Use function ($value, $row) { ... }, which works in every version."
+    },
+    {
+        "id": "querybuilder-aggregate-alias",
+        "level": "error",
+        "pattern": "/->(sum|avg|min|max|count)\\(\\s*[\"'][^\"']+[\"']\\s*,\\s*[\"'][^\"']+[\"']\\s*\\)\\s*(?!->alias)/",
+        "requires": "/querybuilder/i",
+        "message": "Query builder aggregates take columns only; a second argument is a second column. Use ->sum(\"col\")->alias(\"name\")."
+    },
+    {
+        "id": "export-xlsx-trait",
+        "level": "error",
+        "pattern": "/->exportToXLSX\\s*\\(/",
+        "requires": "/ExcelExportable/",
+        "unless": "/BigSpreadsheetExportable/",
+        "message": "exportToXLSX() belongs to BigSpreadsheetExportable; with ExcelExportable use exportToExcel(...)->toBrowser(\"file.xlsx\")."
+    },
+    {
+        "id": "export-csv-trait",
+        "level": "error",
+        "pattern": "/->exportTo(CSV|JSON)\\s*\\(/",
+        "unless": "/CSVExportable/",
+        "message": "exportToCSV() and exportToJSON() come from the trait \\koolreport\\excel\\CSVExportable (not ExcelExportable); add \"use \\koolreport\\excel\\CSVExportable;\" to the report class."
+    },
+    {
+        "id": "excel-template-markup",
+        "level": "error",
+        "pattern": "/<sheet[\\s>]/i",
+        "message": "Excel export templates are read as <div sheet-name=\"...\"><div>...</div></div>; <sheet> elements produce an empty workbook (an exception from excel 12.0.2)."
+    },
+    {
+        "id": "mysql-connectionstring",
+        "level": "warning",
+        "pattern": "/MySQLDataSource/",
+        "requires": "/[\"']connectionString[\"']/",
+        "unless": "/[\"']host[\"']\\s*=>/",
+        "message": "MySQLDataSource ignores \"connectionString\" before core 6.8.1 (\"No database selected\"). Use host/dbname/username/password, or drop \"class\" to use PdoDataSource with the connection string."
+    },
+    {
+        "id": "footer-without-showfooter",
+        "level": "warning",
+        "pattern": "/[\"']footer[\"']\\s*=>/",
+        "unless": "/showFooter/",
+        "message": "Before core 6.8.0 a column \"footer\" is not rendered unless \"showFooter\" => true is set."
+    },
+    {
+        "id": "d3-css-width",
+        "level": "warning",
+        "pattern": "/[\"'](width|height)[\"']\\s*=>\\s*[\"'][\\d.]+(%|em|rem|vw|vh)[\"']/",
+        "requires": "/koolreport\\\\d3/",
+        "message": "koolreport/d3 before 1.7.2 draws nothing for CSS widths such as \"100%\"; use pixels, e.g. \"width\" => 600."
+    },
+    {
+        "id": "morris-jquery",
+        "level": "warning",
+        "pattern": "/koolreport\\\\morris_chart/",
+        "unless": "/jquery/i",
+        "message": "Morris charts need jQuery loaded in the page <head> first; the widget does not load it."
+    },
+    {
+        "id": "sparklines-columns",
+        "level": "warning",
+        "pattern": "/[\"']columns[\"']\\s*=>/",
+        "requires": "/koolreport\\\\sparklines/",
+        "unless": "/[\"']column[\"']\\s*=>/",
+        "message": "Sparklines take one series with \"column\" => \"name\"; before sparklines 1.5.1 \"columns\" is ignored and the first column is charted."
+    },
+    {
+        "id": "stringcase-shape",
+        "level": "warning",
+        "pattern": "/StringCase\\s*\\(\\s*(array\\(|\\[)\\s*[\"'](?!upper|lower|first-cap|all-cap)[^\"']+[\"']\\s*=>\\s*[\"'](upper|lower|first-cap|all-cap)[\"']/",
+        "message": "StringCase takes case => columns: array(\"upper\" => \"name\"). The column => case form works from core 6.8.1 only."
+    },
+    {
+        "id": "rownum-shape",
+        "level": "warning",
+        "pattern": "/RowNumColumn\\s*\\(\\s*(array\\(|\\[)\\s*[\"'][^\"']+[\"']\\s*=>/",
+        "message": "RowNumColumn takes the column name and the first number: new RowNumColumn(\"rank\", 1). array(\"rank\" => 1) works from core 6.8.1 only."
+    },
+    {
+        "id": "differencecolumn-shape",
+        "level": "error",
+        "pattern": "/DifferenceColumn\\s*\\(\\s*(array\\(|\\[)\\s*[\"'][^\"']+[\"']\\s*=>\\s*(array\\(|\\[)/",
+        "message": "DifferenceColumn takes \"newColumn\" => \"sourceColumn\" and no options."
+    },
+    {
+        "id": "numberrange-shape",
+        "level": "error",
+        "pattern": "/NumberRange\\s*\\((?:(?!\\)\\s*\\)\\s*\\)).)*?(array\\(|\\[)\\s*[\"'][<>=!]/s",
+        "message": "NumberRange ranges are array(from, to) with null for an open end, e.g. \"low\" => array(null, 50000); operators such as array(\"<\", 50000) match nothing."
+    },
+    {
+        "id": "join-without-link",
+        "level": "error",
+        "pattern": "/new\\s+[\\\\\\w]*(Join|LeftJoin|RightJoin|InnerJoin|OuterJoin|FullJoin)\\s*\\(\\s*\\$\\w+\\s*,\\s*\\$\\w+\\s*\\)|->pipe\\(\\s*new\\s+[\\\\\\w]*(Join|LeftJoin|RightJoin|InnerJoin|OuterJoin|FullJoin)\\s*\\(\\s*\\$\\w+\\s*,\\s*(array\\(|\\[)/",
+        "message": "Join processes are not piped into: build them from both sources, $join = new Join($left, $right, array(\"leftKey\" => \"rightKey\")), then $join->pipe(...)."
+    },
+    {
+        "id": "fillnull-shape",
+        "level": "warning",
+        "pattern": "/FillNull\\s*\\(\\s*(array\\(|\\[)\\s*[\"'](?!newValue|targetValue|targetColumns|excludedColumns|targetColumnType)\\w+[\"']\\s*=>/",
+        "message": "FillNull takes \"newValue\" and \"targetColumns\"; the column => value shorthand works from cleandata 1.7.0 only."
+    }
+]

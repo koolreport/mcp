@@ -1,0 +1,186 @@
+#!/usr/bin/env php
+<?php
+/**
+ * KoolReport MCP server (stdio, JSON-RPC 2.0, no dependencies).
+ *
+ * Gives an AI coding assistant three tools:
+ *   koolreport_check       check report code before running it (unknown classes with
+ *                          suggestions, wrong parameter shapes, version pitfalls)
+ *   koolreport_reference   read a section of the KoolReport reference (llms-full.txt)
+ *   koolreport_find_class  does a class exist; if not, what was probably meant
+ *
+ * Classes are indexed from the project's vendor/koolreport (found from the working directory,
+ * or KOOLREPORT_ROOT), so answers match the installed version.
+ *
+ * Register it, e.g. for Claude Code:
+ *   claude mcp add koolreport -- php /path/to/tools/llms/mcp-server.php
+ */
+
+// Runs from tools/llms (lib/ beside it) or from the koolreport/mcp package (bin/, lib/ one level up).
+$base = is_dir(__DIR__ . "/lib") ? __DIR__ : dirname(__DIR__);
+require "$base/lib/Checker.php";
+
+$root = getenv("KOOLREPORT_ROOT") ?: koolreport_find_install(getcwd());
+list($classes, $namespaces) = koolreport_class_index(koolreport_package_dirs($root));
+list($rules, $reference) = koolreport_resources($base);
+$facts = array("lint" => $rules);
+
+$tools = array(
+    array(
+        "name" => "koolreport_check",
+        "description" => "Check KoolReport report code without running it. Finds classes that do not exist (with the right class to use), wrong parameter shapes and version pitfalls. Pass every PHP file of the report.",
+        "inputSchema" => array(
+            "type" => "object",
+            "properties" => array(
+                "files" => array(
+                    "type" => "object",
+                    "description" => "File name => PHP source, e.g. {\"MyReport.php\": \"<?php ...\", \"MyReport.view.php\": \"...\"}",
+                    "additionalProperties" => array("type" => "string"),
+                ),
+            ),
+            "required" => array("files"),
+        ),
+    ),
+    array(
+        "name" => "koolreport_reference",
+        "description" => "Read the KoolReport reference. Without a topic, lists the sections; with a topic (e.g. \"pivot\", \"data sources\", \"excel\"), returns the matching sections.",
+        "inputSchema" => array(
+            "type" => "object",
+            "properties" => array("topic" => array("type" => "string")),
+        ),
+    ),
+    array(
+        "name" => "koolreport_find_class",
+        "description" => "Check whether a KoolReport class exists in the installed version, e.g. koolreport\\widgets\\google\\PieChart; if not, suggests the classes that were probably meant.",
+        "inputSchema" => array(
+            "type" => "object",
+            "properties" => array("name" => array("type" => "string")),
+            "required" => array("name"),
+        ),
+    ),
+);
+
+function mcp_tool_call($name, $args, $classes, $namespaces, $facts, $reference)
+{
+    switch ($name) {
+    case "koolreport_check":
+        $files = isset($args["files"]) && is_array($args["files"]) ? $args["files"] : array();
+        if (!$files) {
+            return array("Pass the report's PHP files as {\"files\": {\"name.php\": \"source\"}}.", true);
+        }
+        $findings = koolreport_check_sources($files, $classes, $namespaces, $facts["lint"]);
+        if (!$findings) {
+            return array("No problems found.", false);
+        }
+        $lines = array();
+        foreach ($findings as $f) {
+            $lines[] = "{$f["file"]}:{$f["line"]}: {$f["level"]}: {$f["message"]}";
+        }
+        return array(implode("\n", $lines), false);
+    case "koolreport_reference":
+        if ($reference === "") {
+            return array("The KoolReport reference is not available in this installation.", true);
+        }
+        $sections = preg_split('/^(?=## )/m', $reference);
+        $topic = isset($args["topic"]) ? trim(strtolower($args["topic"])) : "";
+        if ($topic === "") {
+            $titles = array();
+            foreach ($sections as $s) {
+                if (preg_match('/^## (.+)$/m', $s, $m)) {
+                    $titles[] = "- " . $m[1];
+                }
+            }
+            return array("Sections (pass one as topic):\n" . implode("\n", $titles), false);
+        }
+        $words = preg_split('/\s+/', $topic);
+        $hits = array();
+        foreach ($sections as $s) {
+            $title = strtolower(strtok($s, "\n"));
+            $score = 0;
+            foreach ($words as $w) {
+                $score += (strpos($title, $w) !== false ? 3 : 0) + (stripos($s, $w) !== false ? 1 : 0);
+            }
+            if ($score >= 3) {
+                $hits[$score * 100000 - strlen($s)] = $s;
+            }
+        }
+        krsort($hits);
+        return $hits
+            ? array(implode("\n", array_slice($hits, 0, 2)), false)
+            : array("No section matches \"$topic\"; call without a topic to list them.", false);
+    case "koolreport_find_class":
+        $fq = ltrim(str_replace("\\\\", "\\", isset($args["name"]) ? $args["name"] : ""), "\\");
+        $lower = strtolower($fq);
+        if (isset($classes[$lower])) {
+            $c = $classes[$lower];
+            return array("{$c["name"]} exists ({$c["kind"]} in package koolreport/{$c["package"]}).", false);
+        }
+        if (isset($namespaces[$lower])) {
+            $members = array();
+            foreach ($classes as $k => $c) {
+                if (strpos($k, $lower . "\\") === 0 && strpos(substr($k, strlen($lower) + 1), "\\") === false) {
+                    $members[] = substr($c["name"], strlen($fq) + 1);
+                }
+            }
+            sort($members);
+            return array("$fq is a namespace. Classes: " . implode(", ", $members), false);
+        }
+        $s = koolreport_suggest($classes, $fq);
+        return array("$fq does not exist." . ($s ? " Did you mean " . implode(" or ", $s) . "?" : ""), false);
+    }
+    return array("Unknown tool $name", true);
+}
+
+while (($line = fgets(STDIN)) !== false) {
+    $line = trim($line);
+    if ($line === "") {
+        continue;
+    }
+    $msg = json_decode($line, true);
+    if (!is_array($msg) || !isset($msg["method"])) {
+        continue;
+    }
+    if (!isset($msg["id"])) {
+        continue;   // a notification, e.g. notifications/initialized
+    }
+    $result = null;
+    $error = null;
+    switch ($msg["method"]) {
+    case "initialize":
+        $result = array(
+            "protocolVersion" => isset($msg["params"]["protocolVersion"]) ? $msg["params"]["protocolVersion"] : "2025-06-18",
+            "capabilities" => array("tools" => new stdClass()),
+            "serverInfo" => array("name" => "koolreport", "version" => "0.1.0"),
+            "instructions" => "Before running KoolReport report code you wrote, call koolreport_check with its files. Use koolreport_find_class when unsure of a namespace, and koolreport_reference for recipes.",
+        );
+        break;
+    case "ping":
+        $result = new stdClass();
+        break;
+    case "tools/list":
+        $result = array("tools" => $tools);
+        break;
+    case "tools/call":
+        $name = isset($msg["params"]["name"]) ? $msg["params"]["name"] : "";
+        $args = isset($msg["params"]["arguments"]) ? $msg["params"]["arguments"] : array();
+        list($text, $isError) = mcp_tool_call($name, $args, $classes, $namespaces, $facts, $reference);
+        // Optional call log (KOOLREPORT_MCP_LOG=<file>), used by the eval to see which tools ran.
+        if (getenv("KOOLREPORT_MCP_LOG")) {
+            file_put_contents(getenv("KOOLREPORT_MCP_LOG"), json_encode(array(
+                "tool" => $name, "error" => $isError, "problems" => $name === "koolreport_check" ? substr_count($text, ": error:") : null,
+            )) . "\n", FILE_APPEND);
+        }
+        $result = array("content" => array(array("type" => "text", "text" => $text)), "isError" => $isError);
+        break;
+    default:
+        $error = array("code" => -32601, "message" => "Method not found: " . $msg["method"]);
+    }
+    $response = array("jsonrpc" => "2.0", "id" => $msg["id"]);
+    if ($error) {
+        $response["error"] = $error;
+    } else {
+        $response["result"] = $result;
+    }
+    fwrite(STDOUT, json_encode($response, JSON_UNESCAPED_SLASHES) . "\n");
+    fflush(STDOUT);
+}

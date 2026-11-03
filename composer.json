@@ -1,0 +1,30 @@
+{
+    "name": "koolreport/mcp",
+    "description": "MCP server and code checker that help AI coding assistants write correct KoolReport reports",
+    "keywords": [
+        "koolreport",
+        "mcp",
+        "model context protocol",
+        "ai",
+        "php reporting"
+    ],
+    "homepage": "https://www.koolreport.com",
+    "type": "library",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "KoolPHP Inc",
+            "homepage": "https://www.koolphp.net"
+        }
+    ],
+    "require": {
+        "php": ">=7.0"
+    },
+    "suggest": {
+        "koolreport/core": "The checker and class lookup answer for the KoolReport version installed in your project"
+    },
+    "bin": [
+        "bin/koolreport-mcp",
+        "bin/koolreport-check"
+    ]
+}
