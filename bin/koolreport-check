@@ -46,7 +46,7 @@ foreach ($paths as $path) {
         }
     ));
     foreach ($it as $f) {
-        if (substr($f->getFilename(), -4) === ".php") {
+        if (substr($f->getFilename(), -4) === ".php" || substr($f->getFilename(), -5) === ".json") {
             $files[$f->getPathname()] = file_get_contents($f->getPathname());
         }
     }
@@ -55,7 +55,24 @@ foreach ($paths as $path) {
 $root = $root ?: koolreport_find_install($paths[0]);
 list($classes, $namespaces) = koolreport_class_index(koolreport_package_dirs($root));
 list($rules) = koolreport_resources($base);
-$findings = koolreport_check_sources($files, $classes, $namespaces, $rules);
+// .json files that look like report specs are validated with koolreport/spec; the rest is PHP.
+$php = array();
+$findings = array();
+foreach ($files as $name => $source) {
+    if (substr($name, -5) !== ".json") {
+        $php[$name] = $source;
+        continue;
+    }
+    $decoded = json_decode($source, true);
+    if (!is_array($decoded) || !isset($decoded["layout"])) {
+        continue;
+    }
+    $problems = koolreport_check_spec($decoded, $root, $classes);
+    foreach ($problems === null ? array("koolreport/spec is not installed") : $problems as $p) {
+        $findings[] = array("file" => $name, "line" => 1, "level" => "error", "rule" => "spec", "message" => $p);
+    }
+}
+$findings = array_merge($findings, koolreport_check_sources($php, $classes, $namespaces, $rules));
 
 if ($json) {
     echo json_encode(array("root" => $root, "classes" => count($classes), "findings" => $findings), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES), "\n";

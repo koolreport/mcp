@@ -50,6 +50,18 @@ $tools = array(
         ),
     ),
     array(
+        "name" => "koolreport_check_spec",
+        "description" => "Validate a KoolReport report spec (JSON, koolreport/spec) before running it. Returns every problem with its path in the spec. Call koolreport_reference with topic \"spec\" for the format.",
+        "inputSchema" => array(
+            "type" => "object",
+            "properties" => array(
+                "spec" => array("description" => "The spec, as a JSON object or a JSON string"),
+                "strict" => array("type" => "boolean", "description" => "Validate for strict mode (datasets only, no JavaScript)"),
+            ),
+            "required" => array("spec"),
+        ),
+    ),
+    array(
         "name" => "koolreport_find_class",
         "description" => "Check whether a KoolReport class exists in the installed version, e.g. koolreport\\widgets\\google\\PieChart; if not, suggests the classes that were probably meant.",
         "inputSchema" => array(
@@ -83,6 +95,10 @@ function mcp_tool_call($name, $args, $classes, $namespaces, $facts, $reference)
         }
         $sections = preg_split('/^(?=## )/m', $reference);
         $topic = isset($args["topic"]) ? trim(strtolower($args["topic"])) : "";
+        global $root;
+        if ($topic !== "" && preg_match('/\bspec\b|declarative|json report/', $topic) && is_file("$root/spec/docs/SPEC.md")) {
+            return array(file_get_contents("$root/spec/docs/SPEC.md"), false);
+        }
         if ($topic === "") {
             $titles = array();
             foreach ($sections as $s) {
@@ -108,6 +124,13 @@ function mcp_tool_call($name, $args, $classes, $namespaces, $facts, $reference)
         return $hits
             ? array(implode("\n", array_slice($hits, 0, 2)), false)
             : array("No section matches \"$topic\"; call without a topic to list them.", false);
+    case "koolreport_check_spec":
+        global $root;
+        $problems = koolreport_check_spec(isset($args["spec"]) ? $args["spec"] : null, $root, $classes, !empty($args["strict"]));
+        if ($problems === null) {
+            return array("koolreport/spec is not installed in this project (composer require koolreport/spec).", true);
+        }
+        return array($problems ? "Problems:\n- " . implode("\n- ", $problems) : "The spec is valid.", false);
     case "koolreport_find_class":
         $fq = ltrim(str_replace("\\\\", "\\", isset($args["name"]) ? $args["name"] : ""), "\\");
         $lower = strtolower($fq);

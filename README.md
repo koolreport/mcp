@@ -27,6 +27,7 @@ The server gives the assistant three tools:
 |---|---|
 | `koolreport_check` | Checks report code without running it. It flags classes that do not exist (with the class that was meant), wrong parameter shapes, export calls that name no data store, and pitfalls of specific KoolReport versions |
 | `koolreport_find_class` | Says whether a class exists in your installed version; if not, what was probably meant |
+| `koolreport_check_spec` | Validates a declarative report spec ([koolreport/spec](https://github.com/koolreport/spec)) before it runs, every problem with its path |
 | `koolreport_reference` | Returns sections of the KoolReport reference (data sources, processes, widgets, pivot, inputs, Excel export, ...) |
 
 Classes are read from your project's `vendor/koolreport`, so the answers match the version you have
@@ -37,6 +38,8 @@ installed, Pro packages included. Nothing is sent anywhere: the server runs loca
 ```bash
 vendor/bin/koolreport-check src/Reports
 ```
+
+It also validates report specs (`.json` files with a `layout`) when koolreport/spec is installed.
 
 The exit code is 1 when there is an error, so it can run in CI.
 

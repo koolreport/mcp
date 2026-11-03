@@ -157,3 +157,41 @@ function koolreport_resources($base)
     return array($rules, $reference);
 }
 
+/**
+ * Validate a report spec with the installed koolreport/spec, using the static class index for
+ * widget and process lookups (nothing is autoloaded).
+ *
+ * @param array|string $spec       The spec (decoded, or JSON text)
+ * @param string       $root       Directory holding KoolReport packages (has spec/ when installed)
+ * @param array        $classes    Class index from koolreport_class_index()
+ * @param bool         $strict     Validate for strict mode
+ *
+ * @return array|null List of "path: message" strings; null when koolreport/spec is not installed
+ */
+function koolreport_check_spec($spec, $root, $classes, $strict = false)
+{
+    $src = "$root/spec/src";
+    if (!is_file("$src/Validator.php")) {
+        return null;
+    }
+    foreach (array("SpecException", "Expression", "Registry", "Validator") as $file) {
+        require_once "$src/$file.php";
+    }
+    if (is_string($spec)) {
+        $decoded = json_decode($spec, true);
+        if (!is_array($decoded)) {
+            return array("the spec is not valid JSON: " . json_last_error_msg());
+        }
+        $spec = $decoded;
+    }
+    $classExists = function ($class, $base = null) use ($classes) {
+        $lower = strtolower(ltrim($class, "\\"));
+        return isset($classes[$lower]) && ($base === null || isA($classes, $lower, strtolower($base)));
+    };
+    $messages = array();
+    foreach (\koolreport\spec\Validator::validate($spec, array("strict" => $strict), $classExists) as $e) {
+        $messages[] = ($e["path"] !== "" ? $e["path"] . ": " : "") . $e["message"];
+    }
+    return $messages;
+}
+
