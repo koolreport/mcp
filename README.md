@@ -9,19 +9,49 @@ composer require --dev koolreport/mcp
 
 ## Use it with an assistant
 
-Claude Code:
+The server speaks the open Model Context Protocol over stdio, so it works with any assistant that can run a
+local MCP server. Run the commands from your project root (where `vendor/` is).
+
+**Claude Code**
 
 ```bash
 claude mcp add koolreport -- php vendor/bin/koolreport-mcp
 ```
 
-Cursor (`.cursor/mcp.json`):
+**Cursor**: `.cursor/mcp.json`
 
 ```json
 {"mcpServers": {"koolreport": {"command": "php", "args": ["vendor/bin/koolreport-mcp"]}}}
 ```
 
-The server gives the assistant three tools:
+**VS Code (GitHub Copilot agent mode)**: `.vscode/mcp.json`
+
+```json
+{"servers": {"koolreport": {"command": "php", "args": ["vendor/bin/koolreport-mcp"]}}}
+```
+
+**OpenAI Codex CLI**: `~/.codex/config.toml`
+
+```toml
+[mcp_servers.koolreport]
+command = "php"
+args = ["vendor/bin/koolreport-mcp"]
+```
+
+**Gemini CLI**: `~/.gemini/settings.json`
+
+```json
+{"mcpServers": {"koolreport": {"command": "php", "args": ["vendor/bin/koolreport-mcp"]}}}
+```
+
+**Windsurf, Cline, Continue, Zed, JetBrains AI Assistant**: add an MCP server in the tool's settings with
+command `php` and argument `vendor/bin/koolreport-mcp`.
+
+These formats are the ones each tool documents at the time of writing; check its current docs if one does
+not load. Web chat apps (ChatGPT, Claude.ai in the browser) connect to hosted MCP servers only, so they
+cannot use this local server. Use `koolreport-check` there or point them at the reference below.
+
+The server gives the assistant four tools:
 
 | tool | what it does |
 |---|---|
@@ -34,6 +64,8 @@ Classes are read from your project's `vendor/koolreport`, so the answers match t
 installed, Pro packages included. Nothing is sent anywhere: the server runs locally over stdio.
 
 ## Check code from the command line
+
+For assistants without MCP (or in CI), the same checks run as a command:
 
 ```bash
 vendor/bin/koolreport-check src/Reports

@@ -183,6 +183,17 @@ while (($line = fgets(STDIN)) !== false) {
     case "tools/list":
         $result = array("tools" => $tools);
         break;
+    // This server has only tools, but some clients list resources and prompts at startup
+    // and report "method not found" as a failure, so answer with empty lists.
+    case "resources/list":
+        $result = array("resources" => array());
+        break;
+    case "resources/templates/list":
+        $result = array("resourceTemplates" => array());
+        break;
+    case "prompts/list":
+        $result = array("prompts" => array());
+        break;
     case "tools/call":
         $name = isset($msg["params"]["name"]) ? $msg["params"]["name"] : "";
         $args = isset($msg["params"]["arguments"]) ? $msg["params"]["arguments"] : array();
